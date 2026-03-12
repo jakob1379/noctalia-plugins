@@ -6,13 +6,15 @@ Item {
   id: root
 
   property var pluginApi: null
-  property var cfg: pluginApi?.pluginSettings || ({})
-  property var defaults: pluginApi?.manifest?.metadata?.defaultSettings || ({})
+  readonly property var cfg: pluginApi?.pluginSettings ?? ({})
+  readonly property var defaults: pluginApi?.manifest?.metadata?.defaultSettings ?? ({})
+  readonly property var additionalModes: parseModeList(cfg?.additionalModes ?? defaults?.additionalModes ?? [])
+  readonly property var excludedModes: parseModeList(cfg?.excludeModes ?? defaults?.excludeModes ?? [])
 
-  property var preferredBuiltInModes: ["file", "cmd", "win", "settings", "emoji", "clip"]
+  readonly property var preferredBuiltInModes: ["file", "cmd", "win", "settings", "emoji", "clip"]
 
   function detectMode(searchText) {
-    const text = searchText || "";
+    const text = searchText ?? "";
     const match = text.match(/^>(\S+)/);
     if (match && match[1])
       return match[1];
@@ -42,43 +44,32 @@ Item {
   }
 
   function parseModeList(value) {
-    var input = value;
-    if (input === undefined || input === null)
+    if (value === undefined || value === null)
       return [];
 
     var items = [];
-    if (Array.isArray(input)) {
-      items = input;
-    } else if (typeof input === "string") {
-      items = input.split(",");
+    if (Array.isArray(value)) {
+      items = value;
+    } else if (typeof value === "string") {
+      items = value.split(",");
     } else {
       return [];
     }
 
+    var seen = new Set();
     var result = [];
-    var seen = {};
     for (var i = 0; i < items.length; i++) {
       var mode = normalizePrefix(items[i]);
-      if (!mode || seen[mode])
+      if (!mode || seen.has(mode))
         continue;
-      seen[mode] = true;
+      seen.add(mode);
       result.push(mode);
     }
     return result;
   }
 
-  function getAdditionalModes() {
-    var value = cfg.additionalModes;
-    if (value === undefined)
-      value = defaults.additionalModes;
-    return parseModeList(value);
-  }
-
-  function getExcludedModes() {
-    var value = cfg.excludeModes;
-    if (value === undefined)
-      value = defaults.excludeModes;
-    return parseModeList(value);
+  function wrapIndex(index, count) {
+    return (index % count + count) % count;
   }
 
   function getAvailableModes() {
@@ -100,12 +91,14 @@ Item {
     }
 
     var pluginModes = [];
-    var providerIds = LauncherProviderRegistry.getPluginProviders() || [];
+    var providerIds = LauncherProviderRegistry.getPluginProviders() ?? [];
     for (var j = 0; j < providerIds.length; j++) {
       var providerId = providerIds[j];
-      var metadata = LauncherProviderRegistry.getProviderMetadata(providerId) || {};
+      var metadata = LauncherProviderRegistry.getProviderMetadata(providerId) ?? {};
       var pluginId = providerId.startsWith("plugin:") ? providerId.slice(7) : providerId;
-      var prefix = metadata.commandPrefix || pluginId;
+      var prefix = metadata.commandPrefix;
+      if (prefix === undefined || prefix === null || prefix === "")
+        prefix = pluginId;
       prefix = normalizePrefix(prefix);
       if (prefix)
         pluginModes.push(prefix);
@@ -116,12 +109,10 @@ Item {
       addMode(pluginModes[k]);
     }
 
-    var additionalModes = getAdditionalModes();
     for (var m = 0; m < additionalModes.length; m++) {
       addMode(additionalModes[m]);
     }
 
-    var excludedModes = getExcludedModes();
     if (excludedModes.length === 0)
       return result;
 
@@ -144,7 +135,7 @@ Item {
         return;
 
       const isOpen = PanelService.isLauncherOpen(screen);
-      const currentSearch = PanelService.getLauncherSearchText(screen) || "";
+      const currentSearch = PanelService.getLauncherSearchText(screen) ?? "";
       const currentMode = detectMode(currentSearch);
       const modeOrder = getAvailableModes();
       const count = modeOrder.length;
@@ -155,7 +146,7 @@ Item {
       if (isOpen) {
         const currentIndex = modeIndex(currentMode, modeOrder);
         if (currentIndex >= 0)
-          nextIndex = ((currentIndex + step) % count + count) % count;
+          nextIndex = wrapIndex(currentIndex + step, count);
       }
 
       const nextSearch = ">" + modeOrder[nextIndex] + " ";

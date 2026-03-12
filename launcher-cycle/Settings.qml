@@ -7,11 +7,13 @@ ColumnLayout {
   id: root
 
   property var pluginApi: null
-  property var cfg: pluginApi?.pluginSettings || ({})
-  property var defaults: pluginApi?.manifest?.metadata?.defaultSettings || ({})
+  readonly property var cfg: pluginApi?.pluginSettings ?? ({})
+  readonly property var defaults: pluginApi?.manifest?.metadata?.defaultSettings ?? ({})
+  readonly property var additionalModesSetting: cfg?.additionalModes ?? defaults?.additionalModes ?? []
+  readonly property var excludeModesSetting: cfg?.excludeModes ?? defaults?.excludeModes ?? []
 
-  property string editAdditionalModesText: modeListToText(cfg.additionalModes !== undefined ? cfg.additionalModes : defaults.additionalModes)
-  property string editExcludeModesText: modeListToText(cfg.excludeModes !== undefined ? cfg.excludeModes : defaults.excludeModes)
+  property string editAdditionalModesText: modeListToText(additionalModesSetting)
+  property string editExcludeModesText: modeListToText(excludeModesSetting)
 
   spacing: Style.marginL
 
@@ -30,26 +32,25 @@ ColumnLayout {
   }
 
   function parseModeInput(value) {
-    var input = value;
-    if (input === undefined || input === null)
+    if (value === undefined || value === null)
       return [];
 
     var items = [];
-    if (Array.isArray(input)) {
-      items = input;
-    } else if (typeof input === "string") {
-      items = input.split(",");
+    if (Array.isArray(value)) {
+      items = value;
+    } else if (typeof value === "string") {
+      items = value.split(",");
     } else {
       return [];
     }
 
+    var seen = new Set();
     var result = [];
-    var seen = {};
     for (var i = 0; i < items.length; i++) {
       var mode = normalizePrefix(items[i]);
-      if (!mode || seen[mode])
+      if (!mode || seen.has(mode))
         continue;
-      seen[mode] = true;
+      seen.add(mode);
       result.push(mode);
     }
     return result;
